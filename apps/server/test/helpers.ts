@@ -248,7 +248,8 @@ export class TestClient {
       answer,
       idempotencyKey: `idem_${Math.random().toString(36).slice(2)}`,
       clientMonoAt,
-      clientSentAt: clientMonoAt + (this.lastSample?.offset ?? 0),
+      // like a real browser: performance.now()-based estimates carry fractional milliseconds
+      clientSentAt: clientMonoAt + (this.lastSample?.offset ?? 0) + 0.37,
       clockEpochId: this.epoch,
       ...extra,
     };

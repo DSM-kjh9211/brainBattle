@@ -129,7 +129,8 @@ export const PRESET_SETTINGS: Record<Exclude<PresetName, 'CUSTOM'>, SessionSetti
     deliveryMode: 'PAPER',
     progressMode: 'FREE',
     scoringMode: 'POINT_BASED',
-    editPolicy: 'ALLOW',
+    // competition: the first answer counts (live scores would otherwise reveal correctness)
+    editPolicy: 'NO_EDIT',
     revealPolicy: 'IMMEDIATE',
     scoreboard: { visibility: 'FULL', visible: true },
     timing: { ...BASE.timing, sessionTimeLimitSec: 50 * 60, defaultQuestionTimeLimitSec: null },
@@ -186,13 +187,14 @@ export interface SettingsWarning {
 export function settingsWarnings(s: SessionSettings): SettingsWarning[] {
   const out: SettingsWarning[] = [];
   const editable = s.editPolicy !== 'NO_EDIT';
-  const liveScore = s.scoreboard.visibility !== 'PRIVATE';
-  if (editable && (s.revealPolicy === 'IMMEDIATE' || liveScore)) {
+  // With any other reveal policy the server holds score changes until the question/session
+  // closes (see SessionRuntime.holdScores), so live scores cannot leak correctness.
+  if (editable && s.revealPolicy === 'IMMEDIATE') {
     out.push({
       code: 'EDIT_WITH_LIVE_FEEDBACK',
       message:
-        '답안 수정이 허용된 상태에서 채점 결과/점수가 실시간 공개됩니다. 학생이 점수 변화를 보고 답을 고칠 수 있습니다. ' +
-        '경쟁 목적이면 "제출 후 수정 불가" 또는 점수 비공개를 권장합니다.',
+        '답안 수정이 허용된 상태에서 정오/점수가 즉시 공개됩니다. 학생이 결과를 보고 답을 고칠 수 있습니다. ' +
+        '경쟁 목적이면 "제출 후 수정 불가" 또는 "문제 종료 후 공개"를 권장합니다.',
     });
   }
   if (s.scoringMode === 'ACCURACY_SPEED' && s.progressMode === 'FREE') {

@@ -108,7 +108,19 @@ export interface KeyLike {
   metaKey: boolean;
   /** KeyboardEvent.code (layout independent, robust against IME e.g. Korean input) */
   code: string;
+  /** KeyboardEvent.key — fallback when `code` is empty (virtual keyboards, remote desktop, automation) */
+  key?: string;
 }
+
+function codeFromKey(key: string | undefined): string {
+  if (!key) return '';
+  if (/^[a-zA-Z]$/.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  return KEY_TO_CODE[key] ?? SHIFTED_KEY_TO_CODE[key] ?? '';
+}
+
+/** US-layout shifted characters (Shift+= reports key "+") */
+const SHIFTED_KEY_TO_CODE: Record<string, string> = { '+': 'Equal', '?': 'Slash', _: 'Minus', ':': 'Semicolon', '"': 'Quote' };
 
 const KEY_TO_CODE: Record<string, string> = {
   '/': 'Slash',
@@ -145,7 +157,8 @@ export function parseShortcut(binding: string): KeyLike {
 
 export function matchShortcut(e: KeyLike, binding: string): boolean {
   const s = parseShortcut(binding);
-  const codeMatches = e.code === s.code || (s.code.startsWith('Digit') && e.code === `Numpad${s.code.slice(5)}`);
+  const code = e.code || codeFromKey(e.key);
+  const codeMatches = code === s.code || (s.code.startsWith('Digit') && code === `Numpad${s.code.slice(5)}`);
   return (
     codeMatches &&
     e.ctrlKey === s.ctrlKey &&

@@ -313,8 +313,8 @@ export interface ServerEventMap {
   QUESTION_START: { sessionQuestionId: string; startedAt: number; deadlineAt: number | null; question?: StudentQuestionView };
   QUESTION_END: { sessionQuestionId: string; lockedAt: number };
   QUESTION_RESULT: { sessionQuestionId: string; reveal: QuestionReveal | null; stats: QuestionStats | null };
-  ANSWER_ACCEPTED: { submission: OwnSubmissionView; duplicate: boolean };
-  ANSWER_UPDATED: { submission: OwnSubmissionView; duplicate: boolean };
+  ANSWER_ACCEPTED: { submission: OwnSubmissionView; duplicate: boolean; idempotencyKey: string };
+  ANSWER_UPDATED: { submission: OwnSubmissionView; duplicate: boolean; idempotencyKey: string };
   ANSWER_REJECTED: { sessionQuestionId: string; idempotencyKey: string; code: ErrorCode; message: string };
   SUBMISSION_RECEIVED: { submission: TeacherSubmissionView; stats: QuestionStats };
   SUBMISSION_GRADED: { submission: OwnSubmissionView };

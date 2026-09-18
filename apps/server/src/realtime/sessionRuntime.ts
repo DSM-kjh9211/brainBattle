@@ -6,6 +6,7 @@ import {
   type ClientPayload,
   type ClientRole,
   type LeaderboardChange,
+  type LeaderboardEntry,
   type OwnSubmissionView,
   type ParticipantScoreView,
   type PresentationContent,
@@ -92,6 +93,7 @@ export interface RuntimeDeps {
 }
 
 type Actor = { type: SessionEventRecord['actorType']; id: string | null };
+type PublishedScore = { totalScore: number; correctCount: number; answeredCount: number; rank: number | null };
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -117,6 +119,8 @@ export class SessionRuntime {
   private lbDirty = false;
   private lbPersistDirty = false;
   private clockDirty = new Set<string>();
+  private readonly publishedScores = new Map<string, PublishedScore>();
+  private publishedBoard: LeaderboardEntry[] | null = null;
   disposed = false;
 
   constructor(private readonly deps: RuntimeDeps) {}
@@ -156,6 +160,9 @@ export class SessionRuntime {
     }
     this.leaderboard = new Leaderboard(this.session.settings.ranking);
     this.leaderboard.rebuild(this.rankRows());
+    for (const pid of this.participants.keys()) this.studentScoreView(pid, true);
+    const sb0 = this.session.settings.scoreboard;
+    this.publishedBoard = projectBoard(sb0.visibility, sb0.visible, this.leaderboard.entries());
     this.scheduleTimers();
     this.startBackgroundTimers();
   }
@@ -431,7 +438,7 @@ export class SessionRuntime {
       ...this.common(),
       role: 'SCOREBOARD',
       participantCount: this.activeParticipantCount(),
-      leaderboard: projectBoard(s.visibility, s.visible, this.leaderboard.entries()),
+      leaderboard: this.holdScores() && this.publishedBoard ? this.publishedBoard : projectBoard(s.visibility, s.visible, this.leaderboard.entries()),
       presentationContent: this.presentationContent(),
     };
   }
@@ -440,10 +447,34 @@ export class SessionRuntime {
     return computeStats(sqId, this.subsByQuestion.get(sqId)?.values() ?? []);
   }
 
-  private studentScoreView(pid: string): ParticipantScoreView | null {
-    const sc = this.scores.get(pid);
-    if (!sc) return null;
-    const rank = this.leaderboard.rankOf(pid);
+  /**
+   * Score hold. While students may not yet learn whether their answers are correct (reveal policy
+   * other than IMMEDIATE and the question/session still open), score changes go to teachers only.
+   * Students and the public board receive them when the question closes (SYNCHRONIZED) or the
+   * session ends (FREE). Otherwise a live score/rank change would reveal correctness mid-question
+   * — and, with answer editing allowed, the correct answer.
+   */
+  holdScores(): boolean {
+    const s = this.session;
+    if (s.settings.revealPolicy === 'IMMEDIATE' || s.state === 'FINISHED') return false;
+    if (s.settings.progressMode === 'FREE') return s.state === 'ACTIVE' || s.state === 'PAUSED';
+    const cur = this.currentQuestion();
+    return !!cur && (cur.phase === 'ACTIVE' || cur.phase === 'PREPARE');
+  }
+
+  /** Score as last published to the student (live when not holding). */
+  private studentScoreView(pid: string, live = !this.holdScores()): ParticipantScoreView | null {
+    let raw: PublishedScore | undefined;
+    if (live) {
+      const sc = this.scores.get(pid);
+      if (!sc) return null;
+      raw = { totalScore: sc.totalScore, correctCount: sc.correctCount, answeredCount: sc.answeredCount, rank: this.leaderboard.rankOf(pid) };
+      this.publishedScores.set(pid, raw);
+    } else {
+      raw = this.publishedScores.get(pid) ?? { totalScore: 0, correctCount: 0, answeredCount: 0, rank: null };
+    }
+    const sc = raw;
+    const rank = raw.rank;
     const s = this.session.settings.scoreboard;
     const v = projectSelf(s.visibility, s.visible, this.session.resultsReleased, { ...sc, rank });
     if (!v.showScore) return null;
@@ -864,6 +895,7 @@ export class SessionRuntime {
     this.broadcastStateChange('SESSION_END');
     if (s.resultsReleased) this.sendResultsToStudents();
     this.sendSnapshotNow();
+    this.sendScoreViews();
     this.emitPresentation();
   }
 
@@ -1022,6 +1054,7 @@ export class SessionRuntime {
       });
     }
     this.sendScoreViews();
+    this.sendSnapshotNow();
   }
 
   async endQuestion(actor: Actor, sqId: string, at?: number): Promise<void> {
@@ -1243,7 +1276,7 @@ export class SessionRuntime {
     if (prior) {
       const cur = this.subsById.get(prior.submissionId)!;
       const view = toOwnSubmission(cur, this.canSeeGrade(sq));
-      conn.send(prior.revision === 1 ? 'ANSWER_ACCEPTED' : 'ANSWER_UPDATED', { submission: view, duplicate: true }, { reqId });
+      conn.send(prior.revision === 1 ? 'ANSWER_ACCEPTED' : 'ANSWER_UPDATED', { submission: view, duplicate: true, idempotencyKey: p.idempotencyKey }, { reqId });
       return;
     }
 
@@ -1328,7 +1361,8 @@ export class SessionRuntime {
       answer: p.answer,
       normalized: g.normalized,
       revision: (existing?.revision ?? 0) + 1,
-      clientSentAt: p.clientSentAt,
+      // stored as integer epoch ms (browser clocks report fractional milliseconds)
+      clientSentAt: Math.round(p.clientSentAt),
       serverReceivedAt: receivedAt,
       effectiveSubmittedAt: decision.effectiveSubmittedAt,
       timestampSource: decision.source,
@@ -1381,7 +1415,7 @@ export class SessionRuntime {
       participant.lastClientTimestamp = Math.max(participant.lastClientTimestamp ?? 0, decision.effectiveSubmittedAt);
     }
     const own = toOwnSubmission(rec, this.canSeeGrade(sq));
-    conn.send(existing ? 'ANSWER_UPDATED' : 'ANSWER_ACCEPTED', { submission: own, duplicate: false }, { reqId });
+    conn.send(existing ? 'ANSWER_UPDATED' : 'ANSWER_ACCEPTED', { submission: own, duplicate: false, idempotencyKey: p.idempotencyKey }, { reqId });
     this.emit('SUBMISSION_RECEIVED', { submission: toTeacherSubmission(rec), stats: this.stats(sq.id) }, { teachers: true });
     const changes = this.leaderboard.upsert(this.rankRow(pid));
     this.publishLeaderboardChanges(changes);
@@ -1413,15 +1447,23 @@ export class SessionRuntime {
     this.lbPersistDirty = true;
     const total = this.leaderboard.size;
     const version = this.leaderboard.version;
-    if (changes.length > this.deps.config.incrementalMaxChanges) {
+    const big = changes.length > this.deps.config.incrementalMaxChanges;
+    if (big) {
       this.sendSnapshotNow();
     } else {
       this.emit('LEADERBOARD_UPDATE', { version, changes, removed, total }, { teachers: true });
+    }
+    // score hold: students and the public board learn about changes when the question closes
+    if (this.holdScores()) return;
+    if (!big) {
       const sb = this.session.settings.scoreboard;
       const proj = projectChanges(sb.visibility, sb.visible, changes);
       if (proj === null) this.sendBoardSnapshot();
-      else if (proj.changes.length || proj.removed.length || removed.length) {
-        this.emit('LEADERBOARD_UPDATE', { version, changes: proj.changes, removed: [...proj.removed, ...removed], total }, { boards: true });
+      else {
+        if (proj.changes.length || proj.removed.length || removed.length) {
+          this.emit('LEADERBOARD_UPDATE', { version, changes: proj.changes, removed: [...proj.removed, ...removed], total }, { boards: true });
+        }
+        this.publishedBoard = projectBoard(sb.visibility, sb.visible, this.leaderboard.entries());
       }
     }
     const affected = changes.map((c) => c.participantId).filter((id) => this.students.has(id));
@@ -1440,7 +1482,11 @@ export class SessionRuntime {
 
   private sendBoardSnapshot(): void {
     const sb = this.session.settings.scoreboard;
-    const entries = projectBoard(sb.visibility, sb.visible, this.leaderboard.entries());
+    const entries =
+      this.holdScores() && this.publishedBoard
+        ? projectBoard(sb.visibility, sb.visible, this.publishedBoard)
+        : projectBoard(sb.visibility, sb.visible, this.leaderboard.entries());
+    if (!this.holdScores()) this.publishedBoard = entries;
     this.emit(
       'LEADERBOARD_SNAPSHOT',
       { version: this.leaderboard.version, entries, total: this.leaderboard.size, visibility: sb.visibility, visible: sb.visible },
@@ -1537,7 +1583,7 @@ export class SessionRuntime {
 
 function sanitizeNickname(raw: string): string {
   // eslint-disable-next-line no-control-regex
-  const s = raw.normalize('NFKC').replace(/[ -]/g, '').trim().replace(/\s+/g, ' ');
+  const s = raw.normalize('NFKC').replace(/\p{Cc}/gu, '').trim().replace(/\s+/g, ' ');
   if (s.length < 1 || s.length > 20) throw new AppError('BAD_REQUEST', 'nickname must be 1–20 characters');
   return s;
 }

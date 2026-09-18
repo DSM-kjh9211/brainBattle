@@ -81,6 +81,9 @@ describe('math shortcuts', () => {
     expect(matchShortcut(ev('KeyR', { ctrlKey: true }), 'Ctrl+R')).toBe(true);
     expect(matchShortcut(ev('KeyR', { ctrlKey: true, shiftKey: true }), 'Ctrl+R')).toBe(false);
     expect(matchShortcut(ev('Numpad2', { altKey: true }), 'Alt+2')).toBe(true);
+    // empty code (virtual keyboard / remote desktop): fall back to key
+    expect(matchShortcut({ ...ev('', { ctrlKey: true }), key: 'r' }, 'Ctrl+R')).toBe(true);
+    expect(matchShortcut({ ...ev('', { ctrlKey: true }), key: '/' }, 'Ctrl+/')).toBe(true);
   });
   it('remaps browser-reserved bindings on the web only', () => {
     expect(isBrowserReserved('Ctrl+2', 'win')).toBe(true);

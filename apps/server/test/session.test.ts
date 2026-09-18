@@ -112,7 +112,7 @@ describe('joining', () => {
 
 describe('reconnection', () => {
   it('WebSocket 재연결: participant survives disconnect and state is restored by participantId', async () => {
-    const { s, a } = await liveQuestion([Q.mc(), Q.mc()]);
+    const { s, a } = await liveQuestion([Q.mc(), Q.mc()], { revealPolicy: 'IMMEDIATE' });
     const pid = (await a.c.request('REQUEST_SNAPSHOT', {})).payload as StudentSessionState;
     const acc = await a.c.request('SUBMIT_ANSWER', a.c.submitPayload(s.sq(0), { kind: 'choice', choiceIds: ['b'] }, 100));
     expect(acc.type).toBe('ANSWER_ACCEPTED');
@@ -369,7 +369,7 @@ describe('answer editing', () => {
 
 describe('scoring and ranking', () => {
   it('점수 변경: manual partial score updates totals and ranking immediately', async () => {
-    const { s, a } = await liveQuestion([Q.essay({ score: 10, timeLimitSec: 60 })]);
+    const { s, a } = await liveQuestion([Q.essay({ score: 10, timeLimitSec: 60 })], { revealPolicy: 'IMMEDIATE' });
     const r = await a.c.request('SUBMIT_ANSWER', a.c.submitPayload(s.sq(0), { kind: 'text', raw: '증명: ...' }, 0));
     expect(r.type).toBe('ANSWER_ACCEPTED');
     const sub = (await s.teacher.waitFor('SUBMISSION_RECEIVED')).payload.submission;
@@ -415,7 +415,7 @@ describe('scoring and ranking', () => {
 
 describe('scoreboard', () => {
   it('Scoreboard 갱신: board receives incremental updates filtered by the visibility policy, read-only', async () => {
-    const s = await setup([Q.mc({ timeLimitSec: 60 })], { progressMode: 'SYNCHRONIZED', scoreboard: { visibility: 'TOP_3', visible: true } });
+    const s = await setup([Q.mc({ timeLimitSec: 60 })], { progressMode: 'SYNCHRONIZED', revealPolicy: 'IMMEDIATE', scoreboard: { visibility: 'TOP_3', visible: true } });
     const tok = await api(t, 'POST', `/api/sessions/${s.session.id}/scoreboard-token`, undefined, s.teacherToken);
     const board = await TestClient.connect(t);
     const bs = await board.request('JOIN_SESSION', { role: 'SCOREBOARD', sessionId: s.session.id, scoreboardToken: tok.body.token });
@@ -446,6 +446,36 @@ describe('scoreboard', () => {
     t.clock.advance(5000);
     const snap = await board.waitFor('LEADERBOARD_SNAPSHOT');
     expect(snap.payload.entries).toHaveLength(4);
+  });
+
+  it('score hold: with answers hidden until the question ends, students and the board see score changes only after it closes', async () => {
+    const s = await setup([Q.mc({ timeLimitSec: 60 })], { progressMode: 'SYNCHRONIZED', revealPolicy: 'AFTER_QUESTION', editPolicy: 'ALLOW' });
+    const tok = await api(t, 'POST', `/api/sessions/${s.session.id}/scoreboard-token`, undefined, s.teacherToken);
+    const board = await TestClient.connect(t);
+    await board.request('JOIN_SESSION', { role: 'SCOREBOARD', sessionId: s.session.id, scoreboardToken: tok.body.token });
+    const a = await student(s, 'holder');
+    await s.teacher.cmd('TEACHER_START_SESSION');
+    await s.teacher.cmd('TEACHER_START_QUESTION', { sessionQuestionId: s.sq(0), countdownSec: 0 });
+    t.clock.advance(1000);
+    board.clear();
+    a.c.clear();
+    const r = await a.c.request('SUBMIT_ANSWER', a.c.submitPayload(s.sq(0), { kind: 'choice', choiceIds: ['b'] }, 0));
+    expect((r.payload as any).submission.isCorrect).toBeUndefined();
+    // the teacher sees the change immediately
+    await s.teacher.waitFor('LEADERBOARD_UPDATE', (p) => p.changes.some((c) => c.score === 10));
+    t.clock.advance(5000); // periodic snapshot tick must not leak either
+    await new Promise((res) => setTimeout(res, 150));
+    expect(a.c.messages.filter((m) => m.type === 'SCORE_UPDATE')).toEqual([]);
+    expect(board.messages.some((m) => (m.type === 'LEADERBOARD_UPDATE' || m.type === 'LEADERBOARD_SNAPSHOT') && JSON.stringify(m.payload).includes('"score":10'))).toBe(false);
+    const snap = (await a.c.request('REQUEST_SNAPSHOT', {})).payload as StudentSessionState;
+    expect(snap.score?.totalScore ?? 0).toBe(0);
+    // question closes ⇒ published
+    await s.teacher.cmd('TEACHER_END_QUESTION', { sessionQuestionId: s.sq(0) });
+    const own = await a.c.waitFor('SCORE_UPDATE', (p) => p.scores[0]!.totalScore === 10);
+    expect(own.payload.scores[0]!.rank).toBe(1);
+    const graded = await a.c.waitFor('SUBMISSION_GRADED');
+    expect(graded.payload.submission.isCorrect).toBe(true);
+    await board.waitFor('LEADERBOARD_SNAPSHOT', (p) => p.entries.some((e) => e.score === 10));
   });
 
   it('presentation cannot reveal the answer while the question is open', async () => {
