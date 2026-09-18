@@ -52,6 +52,7 @@ export default function LiveSession() {
 
   const battle = useBattle<TeacherSessionState>({
     enabled: !!token,
+    routeKey: id,
     reducer: teacherReducer,
     join: () => ({ role: 'TEACHER', sessionId: id, authToken: token! }),
     onEvent: (env, socket) => {

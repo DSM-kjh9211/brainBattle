@@ -15,6 +15,7 @@ export default function PresentPage() {
   const token = params.get('token') ?? '';
   const battle = useBattle<ScoreboardSessionState>({
     enabled: !!token,
+    routeKey: sessionId,
     reducer: boardReducer,
     join: () => ({ role: 'SCOREBOARD', sessionId, scoreboardToken: token }),
   });

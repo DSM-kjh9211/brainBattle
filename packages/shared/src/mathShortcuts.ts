@@ -71,9 +71,10 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
 
 /** Bindings a web page cannot intercept, per OS. */
 const BROWSER_RESERVED: Record<ShortcutOS, RegExp[]> = {
-  win: [/^Ctrl\+[1-9]$/, /^Ctrl\+[WTN]$/, /^Ctrl\+Shift\+[TNW]$/],
-  linux: [/^Ctrl\+[1-9]$/, /^Ctrl\+[WTN]$/, /^Ctrl\+Shift\+[TNW]$/, /^Alt\+[1-9]$/],
-  mac: [/^Meta\+[1-9]$/, /^Meta\+[WTNQ]$/],
+  // Ctrl+Shift+I/J/C open DevTools and cannot be intercepted either
+  win: [/^Ctrl\+[1-9]$/, /^Ctrl\+[WTN]$/, /^Ctrl\+Shift\+[TNWIJC]$/],
+  linux: [/^Ctrl\+[1-9]$/, /^Ctrl\+[WTN]$/, /^Ctrl\+Shift\+[TNWIJC]$/, /^Alt\+[1-9]$/],
+  mac: [/^Meta\+[1-9]$/, /^Meta\+[WTNQ]$/, /^Meta\+Alt\+[IJC]$/],
 };
 
 export function isBrowserReserved(binding: string, os: ShortcutOS): boolean {

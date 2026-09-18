@@ -120,6 +120,12 @@ export class RealtimeHub {
   private originAllowed(req: IncomingMessage): boolean {
     const origin = req.headers.origin;
     if (this.deps.allowedOrigins === '*' || !origin) return true; // non-browser clients (desktop, tests) send no Origin
+    try {
+      // the server's own web client (WEB_DIST, same origin) is always allowed
+      if (new URL(origin).host === req.headers.host) return true;
+    } catch {
+      return false;
+    }
     return this.deps.allowedOrigins.includes(origin);
   }
 
@@ -198,14 +204,14 @@ export class RealtimeHub {
     if (type === 'TIME_SYNC_REQUEST') {
       const p = payload as ClientPayload<'TIME_SYNC_REQUEST'>;
       const rt = conn.sessionId ? this.deps.manager.peek(conn.sessionId) : undefined;
-      if (rt) return rt.handleTimeSync(conn, p, receivedAt);
+      if (rt) return rt.handleTimeSync(conn, p, receivedAt, reqId);
       return conn.send('TIME_SYNC_RESPONSE', {
         seq: p.seq,
         clientMono: p.clientMono,
         serverReceivedAt: receivedAt,
         serverSentAt: this.deps.clock.now(),
         accepted: false,
-      });
+      }, { reqId });
     }
 
     const rt = await this.runtimeFor(conn);

@@ -46,6 +46,7 @@ export function PlayPage() {
   const battle = useBattle<StudentView>({
     enabled: started,
     pendingKey: `bb.pending.${code}`,
+    routeKey: identityRef.current?.sessionId ?? null,
     reducer: studentReducer,
     join: (epoch) => {
       const id = identityRef.current;

@@ -3,12 +3,17 @@ import type { AuthResponse, UserDTO } from '@brainbattle/shared';
 /** Base URL of the dedicated BrainBattle server. Empty ⇒ same origin (dev proxy / served by the server). */
 export const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 
-export function wsUrl(): string {
+/**
+ * WebSocket endpoint. `sid` (when known) is a routing hint so a load balancer can hash every
+ * connection of a session to the battle node that owns it (see docs/DESIGN.md §3).
+ */
+export function wsUrl(sid?: string | null): string {
   const explicit = import.meta.env.VITE_WS_URL as string | undefined;
-  if (explicit) return explicit;
-  if (API_BASE) return API_BASE.replace(/^http/, 'ws') + '/ws';
+  const q = sid ? `?sid=${encodeURIComponent(sid)}` : '';
+  if (explicit) return explicit + q;
+  if (API_BASE) return API_BASE.replace(/^http/, 'ws') + '/ws' + q;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${location.host}/ws`;
+  return `${proto}//${location.host}/ws${q}`;
 }
 
 export class ApiError extends Error {

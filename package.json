@@ -15,7 +15,7 @@
     "seed": "npm run seed -w @brainbattle/server",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/shared && tsc -p apps/server --noEmit && tsc -p apps/web --noEmit"
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p apps/server --noEmit && tsc -p apps/web --noEmit"
   },
   "engines": {
     "node": ">=20"

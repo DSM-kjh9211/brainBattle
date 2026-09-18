@@ -704,7 +704,7 @@ export class SessionRuntime {
    * t2 − t1 stays ~0. It only touches this participant's in-memory clock state; persistence is
    * batched by the flush timer.
    */
-  handleTimeSync(conn: Conn, req: ClientPayload<'TIME_SYNC_REQUEST'>, receivedAt: number): void {
+  handleTimeSync(conn: Conn, req: ClientPayload<'TIME_SYNC_REQUEST'>, receivedAt: number, reqId?: string): void {
     const pid = conn.participantId;
     let accepted = false;
     if (pid) {
@@ -726,7 +726,7 @@ export class SessionRuntime {
           serverReceivedAt: pending.t1,
           serverSentAt: pending.t2,
           accepted,
-        });
+        }, { reqId });
         return;
       }
     }
@@ -737,7 +737,7 @@ export class SessionRuntime {
       serverReceivedAt: receivedAt,
       serverSentAt: this.now,
       accepted,
-    });
+    }, { reqId });
   }
 
   private async flushClockSync(): Promise<void> {

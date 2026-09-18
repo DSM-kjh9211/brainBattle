@@ -10,6 +10,8 @@ export interface UseBattleOptions<S> {
   join: (epochId: string) => JoinSessionPayload;
   reducer: (s: S | null, env: Env) => S | null;
   pendingKey?: string | null;
+  /** session id, if known: load-balancer routing hint */
+  routeKey?: string | null;
   onEvent?: (env: Env, socket: BattleSocket) => void;
 }
 
@@ -29,7 +31,7 @@ export function useBattle<S>(opts: UseBattleOptions<S>) {
   useEffect(() => {
     if (!opts.enabled) return;
     const socket = new BattleSocket({
-      url: wsUrl(),
+      url: wsUrl(opts.routeKey),
       join: (epoch) => optsRef.current.join(epoch),
       pendingKey: opts.pendingKey ?? null,
       onEvent: (env) => {

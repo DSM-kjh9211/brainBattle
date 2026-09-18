@@ -218,8 +218,9 @@ export class TestClient {
     for (let i = 0; i < rounds; i++) {
       const seq = ++this.syncSeq;
       const t0 = this.mono();
-      this.send('TIME_SYNC_REQUEST', { seq, clockEpochId: this.epoch, clientMono: t0, ...(this.lastSample ? { lastSample: this.lastSample } : {}) });
-      const r = await this.waitFor('TIME_SYNC_RESPONSE', (p) => p.seq === seq);
+      const reqId = this.send('TIME_SYNC_REQUEST', { seq, clockEpochId: this.epoch, clientMono: t0, ...(this.lastSample ? { lastSample: this.lastSample } : {}) });
+      // the reply must echo reqId (clients correlate direct replies by reqId)
+      const r = await this.waitFor('TIME_SYNC_RESPONSE', (p, m) => p.seq === seq && m.reqId === reqId);
       const t3 = this.mono();
       const p = r.payload;
       const rtt = Math.max(0, t3 - p.clientMono - (p.serverSentAt - p.serverReceivedAt));
