@@ -1,0 +1,16 @@
+{
+  "name": "@brainbattle/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "dist": "electron-builder --config electron-builder.json"
+  },
+  "devDependencies": {
+    "electron": "^44.4.2",
+    "electron-builder": "^26.0.0"
+  }
+}

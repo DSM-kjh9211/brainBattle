@@ -1,0 +1,29 @@
+{
+  "name": "brainbattle",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BrainBattle - real-time educational quiz / paper battle / exam platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @brainbattle/shared && npm run build -w @brainbattle/server && npm run build -w @brainbattle/web",
+    "dev:server": "npm run dev -w @brainbattle/server",
+    "dev:web": "npm run dev -w @brainbattle/web",
+    "dev:desktop": "npm run dev -w @brainbattle/desktop",
+    "seed": "npm run seed -w @brainbattle/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server --noEmit && tsc -p apps/web --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.1",
+    "ws": "^8.18.0"
+  }
+}
