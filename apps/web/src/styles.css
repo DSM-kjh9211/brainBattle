@@ -120,11 +120,15 @@ select.input { width: auto; min-width: 120px; }
 .brand-mark { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: .45em; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-weight: 900; }
 .tagline { color: var(--muted); margin: 0; }
 .home-card > .brand { justify-content: center; }
-.home-card > .tagline { text-align: center; }
+.home-card { container-type: inline-size; }
+.home-card > .tagline { text-align: center; white-space: nowrap; font-size: clamp(.5rem, 3.5cqi, .85rem); }
 .join-form { display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%); margin: 8px auto; text-align: center; }
 .code-input { font-size: 1.3rem; text-align: center; letter-spacing: .08em; font-weight: 600; padding: 12px; }
 .code-chip { font-family: ui-monospace, monospace; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
 .home-links { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
+.disclosure > summary { cursor: pointer; font-weight: 600; }
+.disclosure[open] > summary { margin-bottom: 14px; }
+.finished-sessions { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 
 /* ---------------------------------------------------------------- student */
 .play { min-height: 100vh; display: flex; flex-direction: column; }

@@ -19,6 +19,22 @@ export default function TeacherHome() {
   const [sessionsError, setSessionsError] = useState(false);
   const [creating, setCreating] = useState(false);
   const nav = useNavigate();
+  const ongoingSessions = sessions.filter((s) => s.state !== 'FINISHED');
+  const finishedSessions = sessions.filter((s) => s.state === 'FINISHED');
+  const sessionItem = (s: SessionSummaryDTO) => (
+    <li key={s.id} className="card-item">
+      <div>
+        <Link to={`/teacher/sessions/${s.id}`} className="card-title">{s.title}</Link>
+        <div className="muted small">
+          코드 <b>{s.joinCode}</b> · {s.participantCount}명 · {new Date(s.createdAt).toLocaleString()}
+        </div>
+      </div>
+      <div className="row">
+        <StateBadge state={s.state} />
+        <Link className="btn ghost" to={`/teacher/sessions/${s.id}/results`}>결과</Link>
+      </div>
+    </li>
+  );
 
   const load = () => {
     setSetsLoading(true);
@@ -88,21 +104,14 @@ export default function TeacherHome() {
           {!sessionsLoading && sessionsError && <p className="error" role="alert">세션을 불러올 수 없습니다. <button className="btn small" onClick={load}>다시 시도</button></p>}
           {!sessionsLoading && !sessionsError && sessions.length === 0 && <p className="muted">아직 진행한 세션이 없습니다.</p>}
           <ul className="card-list">
-            {!sessionsLoading && sessions.map((s) => (
-              <li key={s.id} className="card-item">
-                <div>
-                  <Link to={`/teacher/sessions/${s.id}`} className="card-title">{s.title}</Link>
-                  <div className="muted small">
-                    코드 <b>{s.joinCode}</b> · {s.participantCount}명 · {new Date(s.createdAt).toLocaleString()}
-                  </div>
-                </div>
-                <div className="row">
-                  <StateBadge state={s.state} />
-                  <Link className="btn ghost" to={`/teacher/sessions/${s.id}/results`}>결과</Link>
-                </div>
-              </li>
-            ))}
+            {!sessionsLoading && ongoingSessions.map(sessionItem)}
           </ul>
+          {!sessionsLoading && !sessionsError && finishedSessions.length > 0 && (
+            <details className="disclosure finished-sessions">
+              <summary>완료된 세션 {finishedSessions.length}개 · 보기/숨기기</summary>
+              <ul className="card-list">{finishedSessions.map(sessionItem)}</ul>
+            </details>
+          )}
         </section>
       </div>
     </TeacherLayout>

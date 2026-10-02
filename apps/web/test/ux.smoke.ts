@@ -40,6 +40,12 @@ try {
     await page.getByRole('button', { name: '참가하기', exact: true }).click();
   };
   await page.goto('http://127.0.0.1:5175');
+  for (const width of [320, 375, 1280]) {
+    await page.setViewportSize({ width, height: 812 });
+    assert.equal(await page.locator('.tagline').textContent(), '실시간 문제 풀이 · 종이 시험 답안 제출 · 실시간 점수판');
+    assert.equal(await page.locator('.tagline').evaluate((e: HTMLElement) => getComputedStyle(e).whiteSpace === 'nowrap' && e.scrollWidth <= e.clientWidth), true);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  }
   await open('INVALID');
   await wait(page.getByText('존재하지 않는 참가 코드입니다.'));
   assert.equal(await page.getByRole('dialog').count(), 0);
@@ -74,6 +80,7 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('dialog').count(), 0);
   assert.equal(await page.getByRole('button', { name: '참가하기', exact: true }).evaluate((e: HTMLElement) => document.activeElement === e), true);
+
   await open(session.joinCode);
   await wait(page.getByRole('dialog'));
   await page.locator('.app-dialog-backdrop').click({ position: { x: 2, y: 2 } });
@@ -166,6 +173,80 @@ try {
   assert.equal(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), true);
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('dialog').count(), 0);
+  await page.unroute('**/api/question-sets');
+  await page.unroute('**/api/sessions');
+  const sessionResponse = await fetch(`${t.baseUrl}/api/sessions`, { headers: { authorization: `Bearer ${teacher.token}` } });
+  const storedSessions = await sessionResponse.json();
+  const states = ['CREATED', 'LOBBY', 'READY', 'ACTIVE', 'PAUSED'];
+  const sessionRows = [...storedSessions, ...states.map((state) => ({ ...storedSessions[0], id: state, title: `session-${state}`, state }))];
+  await page.route('**/api/sessions', (route: any) => route.request().method() === 'GET' ? route.fulfill({ json: sessionRows }) : route.continue());
+  let deletes = 0;
+  page.on('request', (request: any) => { if (request.method() === 'DELETE') deletes++; });
+  const preserved = async () => (await t.db.query(`SELECT
+    (SELECT count(*) FROM sessions) AS sessions,
+    (SELECT count(*) FROM session_participants) AS participants,
+    (SELECT count(*) FROM submissions) AS submissions,
+    (SELECT count(*) FROM scores) AS scores,
+    (SELECT count(*) FROM session_events) AS events,
+    (SELECT count(*) FROM audit_logs) AS audits`)).rows;
+  const before = await preserved();
+  await page.goto('http://127.0.0.1:5175/teacher');
+  const finished = page.locator('.finished-sessions');
+  await wait(finished.locator('summary'));
+  assert.equal(await finished.getAttribute('open'), null);
+  assert.equal(await finished.locator('.card-title').isVisible(), false);
+  for (const state of states) await wait(page.getByRole('link', { name: `session-${state}`, exact: true }));
+  await finished.locator('summary').click();
+  await wait(finished.locator('.card-title'));
+  await finished.locator('summary').click();
+  assert.equal(await finished.locator('.card-title').isVisible(), false);
+  for (const state of states) await wait(page.getByRole('link', { name: `session-${state}`, exact: true }));
+  assert.equal(deletes, 0);
+  assert.deepEqual(await preserved(), before);
+  await finished.locator('summary').click();
+  await finished.getByRole('link', { name: '결과', exact: true }).click();
+  await wait(page.getByRole('heading', { name: '결과 분석' }));
+  await page.goto('http://127.0.0.1:5175/teacher/sessions/new');
+  const advanced = page.locator('.settings details');
+  await wait(advanced.locator('summary'));
+  assert.equal(await advanced.getAttribute('open'), null);
+  assert.equal(await advanced.locator('select').first().isVisible(), false);
+  await wait(page.locator('.form-grid select').first());
+  await page.getByRole('button', { name: /Live Quiz/ }).click();
+  await advanced.locator('summary').click();
+  await page.waitForFunction(() => (document.querySelector('.settings select') as HTMLSelectElement)?.value === 'DIGITAL');
+  await Promise.all([
+    page.waitForResponse((r: any) => r.url().endsWith('/api/settings/preview') && r.ok()),
+    page.getByLabel('최대 인원', { exact: true }).fill('23'),
+  ]);
+  await Promise.all([
+    page.waitForResponse((r: any) => r.url().endsWith('/api/settings/preview') && r.ok()),
+    advanced.locator('select').nth(1).selectOption('FREE'),
+  ]);
+  await advanced.locator('summary').click();
+  assert.equal(await page.getByLabel('최대 인원', { exact: true }).isVisible(), false);
+  await wait(page.locator('.settings .warning').first());
+  await advanced.locator('summary').click();
+  assert.equal(await page.getByLabel('최대 인원', { exact: true }).inputValue(), '23');
+  await page.getByRole('button', { name: /^Exam/ }).click();
+  await page.waitForFunction(() => (document.querySelector('.settings select') as HTMLSelectElement)?.value === 'PAPER');
+  assert.notEqual(await page.getByLabel('최대 인원', { exact: true }).inputValue(), '23');
+  await page.getByRole('button', { name: /Live Quiz/ }).click();
+  await page.waitForFunction(() => (document.querySelector('.settings select') as HTMLSelectElement)?.value === 'DIGITAL');
+  await Promise.all([
+    page.waitForResponse((r: any) => r.url().endsWith('/api/settings/preview') && r.ok()),
+    page.getByLabel('최대 인원', { exact: true }).fill('23'),
+  ]);
+  await advanced.locator('summary').click();
+  await page.setViewportSize({ width: 375, height: 812 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'artifacts/ux/new-session-collapsed.png' });
+  const created = page.waitForResponse((r: any) => r.url().endsWith('/api/sessions') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: '세션 만들기', exact: true }).click();
+  const createdSession = await (await created).json();
+  assert.equal(createdSession.settings.join.maxParticipants, 23);
+  assert.equal(createdSession.preset, 'LIVE_QUIZ');
+  console.log('PASS: single-line tagline without overflow (320/375/1280), FINISHED hide/show with ongoing visible and DB/results preserved, collapsed settings/preset reset/custom values/warnings/mobile/create');
   console.log('PASS: join errors, nickname, keyboard/focus, mobile, refresh/resume, actual WebSocket reconnect, duplicate retry, account join, independent dashboard loading/empty, Input/Confirm/nested Notice dialogs');
 } finally {
   if (browser) await browser.close();

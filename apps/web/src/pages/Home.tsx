@@ -56,7 +56,7 @@ export function HomePage({ initialCode = '', joinError, onJoin }: {
   return <div className="home">
     <div className="home-card">
       <div className="brand"><span className="brand-mark">B</span> BrainBattle</div>
-      <p className="tagline">실시간으로 문제에 참여하세요.</p>
+      <p className="tagline">실시간 문제 풀이 · 종이 시험 답안 제출 · 실시간 점수판</p>
       <form className="join-form" onSubmit={(e) => { e.preventDefault(); void go(); }}>
         <label htmlFor="code">참가 코드</label>
         <input id="code" className="input code-input" placeholder="예: 728419" value={code}
