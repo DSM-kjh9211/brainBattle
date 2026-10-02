@@ -119,10 +119,12 @@ select.input { width: auto; min-width: 120px; }
 .brand.small { font-size: 1.1rem; }
 .brand-mark { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: .45em; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-weight: 900; }
 .tagline { color: var(--muted); margin: 0; }
-.join-form { display: flex; flex-direction: column; gap: 10px; }
-.code-input { font-size: 1.6rem; text-align: center; letter-spacing: .12em; font-weight: 800; padding: 14px; }
+.home-card > .brand { justify-content: center; }
+.home-card > .tagline { text-align: center; }
+.join-form { display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%); margin: 8px auto; text-align: center; }
+.code-input { font-size: 1.3rem; text-align: center; letter-spacing: .08em; font-weight: 600; padding: 12px; }
 .code-chip { font-family: ui-monospace, monospace; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
-.home-links { display: flex; justify-content: space-between; font-size: .9rem; }
+.home-links { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
 
 /* ---------------------------------------------------------------- student */
 .play { min-height: 100vh; display: flex; flex-direction: column; }
@@ -345,7 +347,19 @@ math-field.math-field:focus-within { border-color: var(--brand); box-shadow: 0 0
 @media (max-width: 560px) {
   .hide-sm { display: none; }
   .home-card { padding: 22px; }
+  .code-input { font-size: 1.2rem; padding: 10px; }
   .choices { grid-template-columns: 1fr 1fr; }
   math-field.math-field { font-size: 1.3rem; }
   .set-row { flex-wrap: wrap; }
 }
+
+/* Shared short input/confirmation dialogs and panel loading placeholders. */
+.app-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.dialog-form { display: flex; flex-direction: column; gap: 12px; }
+.dialog-form .checkbox { align-items: flex-start; }
+.panel-skeleton { display: flex; flex-direction: column; gap: 12px; }
+.skeleton-row { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); }
+.skeleton-line { height: 14px; border-radius: 5px; background: var(--surface-2); margin: 5px 0; animation: skeleton-pulse 1.5s ease-in-out infinite; }
+.skeleton-line.short { width: 60%; }
+@keyframes skeleton-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }

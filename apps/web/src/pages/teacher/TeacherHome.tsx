@@ -3,36 +3,57 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { QuestionSetDTO, SessionSummaryDTO } from '@brainbattle/shared';
 import { api } from '../../core/api';
 import { StateBadge } from '../../components/common';
+import { useDialogs } from '../../components/Dialog';
+import { PanelSkeleton } from '../../components/Skeleton';
 import { TeacherLayout } from './TeacherLayout';
 
 const MODE_LABEL: Record<string, string> = { DIGITAL: '디지털 문제', PAPER: '종이 문제지', SYNCHRONIZED: '동시 진행', FREE: '자유 진행' };
 
 export default function TeacherHome() {
+  const dialogs = useDialogs();
   const [sets, setSets] = useState<QuestionSetDTO[]>([]);
   const [sessions, setSessions] = useState<SessionSummaryDTO[]>([]);
+  const [setsLoading, setSetsLoading] = useState(true);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [setsError, setSetsError] = useState(false);
+  const [sessionsError, setSessionsError] = useState(false);
+  const [creating, setCreating] = useState(false);
   const nav = useNavigate();
 
   const load = () => {
-    void api<QuestionSetDTO[]>('GET', '/api/question-sets').then(setSets);
-    void api<SessionSummaryDTO[]>('GET', '/api/sessions').then(setSessions);
+    setSetsLoading(true);
+    setSessionsLoading(true);
+    setSetsError(false);
+    setSessionsError(false);
+    void api<QuestionSetDTO[]>('GET', '/api/question-sets').then(setSets).catch(() => setSetsError(true)).finally(() => setSetsLoading(false));
+    void api<SessionSummaryDTO[]>('GET', '/api/sessions').then(setSessions).catch(() => setSessionsError(true)).finally(() => setSessionsLoading(false));
   };
   useEffect(load, []);
 
   const createSet = async () => {
-    const title = prompt('문제 세트 이름');
+    const title = await dialogs.input({ title: '문제 세트 만들기', label: '문제 세트 이름', confirmText: '만들기', maxLength: 200 });
     if (!title) return;
-    const s = await api<QuestionSetDTO>('POST', '/api/question-sets', { title });
-    nav(`/teacher/sets/${s.id}`);
+    setCreating(true);
+    try {
+      const s = await api<QuestionSetDTO>('POST', '/api/question-sets', { title });
+      nav(`/teacher/sets/${s.id}`);
+    } catch {
+      await dialogs.notice({ title: '문제 세트를 만들 수 없습니다.', description: '잠시 후 다시 시도해 주세요.' });
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
-    <TeacherLayout title="대시보드" actions={<button className="btn primary" onClick={createSet}>+ 문제 세트</button>}>
+    <TeacherLayout title="대시보드" actions={<button className="btn primary" disabled={creating} onClick={createSet}>+ 문제 세트</button>}>
       <div className="grid-2">
         <section className="panel">
           <h2>문제 세트</h2>
-          {sets.length === 0 && <p className="muted">문제 세트가 없습니다. 새로 만들어 보세요.</p>}
+          {setsLoading && <PanelSkeleton label="문제 세트" />}
+          {!setsLoading && setsError && <p className="error" role="alert">문제 세트를 불러올 수 없습니다. <button className="btn small" onClick={load}>다시 시도</button></p>}
+          {!setsLoading && !setsError && sets.length === 0 && <p className="muted">문제 세트가 없습니다. 새로 만들어 보세요.</p>}
           <ul className="card-list">
-            {sets.map((s) => (
+            {!setsLoading && sets.map((s) => (
               <li key={s.id} className="card-item">
                 <div>
                   <Link to={`/teacher/sets/${s.id}`} className="card-title">{s.title}</Link>
@@ -46,8 +67,12 @@ export default function TeacherHome() {
                     className="btn ghost"
                     title="세트 복제"
                     onClick={async () => {
-                      await api('POST', `/api/question-sets/${s.id}/duplicate`);
-                      load();
+                      try {
+                        await api('POST', `/api/question-sets/${s.id}/duplicate`);
+                        load();
+                      } catch {
+                        await dialogs.notice({ title: '문제 세트를 복제할 수 없습니다.', description: '잠시 후 다시 시도해 주세요.' });
+                      }
                     }}
                   >
                     ⧉
@@ -59,9 +84,11 @@ export default function TeacherHome() {
         </section>
         <section className="panel">
           <h2>세션</h2>
-          {sessions.length === 0 && <p className="muted">아직 진행한 세션이 없습니다.</p>}
+          {sessionsLoading && <PanelSkeleton label="세션" />}
+          {!sessionsLoading && sessionsError && <p className="error" role="alert">세션을 불러올 수 없습니다. <button className="btn small" onClick={load}>다시 시도</button></p>}
+          {!sessionsLoading && !sessionsError && sessions.length === 0 && <p className="muted">아직 진행한 세션이 없습니다.</p>}
           <ul className="card-list">
-            {sessions.map((s) => (
+            {!sessionsLoading && sessions.map((s) => (
               <li key={s.id} className="card-item">
                 <div>
                   <Link to={`/teacher/sessions/${s.id}`} className="card-title">{s.title}</Link>

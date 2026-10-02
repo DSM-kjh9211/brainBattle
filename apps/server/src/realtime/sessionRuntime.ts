@@ -2,7 +2,6 @@ import {
   AppError,
   canTransitionQuestion,
   canTransitionSession,
-  isJoinableState,
   type ClientPayload,
   type ClientRole,
   type LeaderboardChange,
@@ -37,6 +36,7 @@ import type { Clock, TimerHandle } from '../lib/clock.js';
 import { newId, nicknameKey, randomToken, round2, sha256 } from '../lib/util.js';
 import type { ClassroomRepository } from '../repositories/users.js';
 import type { SessionStore } from './sessionStore.js';
+import { checkNewStudentAdmission, checkStudentAdmission } from './admission.js';
 import type {
   ParticipantRecord,
   ScoreRecord,
@@ -588,16 +588,8 @@ export class SessionRuntime {
       }
 
       // ---- new participant
+      await checkNewStudentAdmission({ state: this.session.state, settings: this.session.settings, participantCount: this.activeParticipantCount() }, req.user, (classroomId, userId) => this.deps.classrooms.isMember(classroomId, userId));
       const st = this.session.settings.join;
-      if (!isJoinableState(this.session.state, st.allowLateJoin)) {
-        throw new AppError('SESSION_CLOSED', `session is not accepting participants (${this.session.state})`);
-      }
-      if ((st.requireLogin || st.classroomId) && !req.user) throw new AppError('LOGIN_REQUIRED', 'login required to join');
-      if (!st.allowGuests && !req.user) throw new AppError('LOGIN_REQUIRED', 'guests are not allowed');
-      if (st.classroomId && !(await this.deps.classrooms.isMember(st.classroomId, req.user!.id))) {
-        throw new AppError('NOT_IN_CLASSROOM', 'only students of the class may join');
-      }
-      if (this.activeParticipantCount() >= st.maxParticipants) throw new AppError('SESSION_FULL', 'session is full');
 
       const nickname = sanitizeNickname(req.nickname ?? req.user?.name ?? '');
       const key = nicknameKey(nickname);
@@ -644,6 +636,14 @@ export class SessionRuntime {
       const count = this.activeParticipantCount();
       this.emit('PARTICIPANT_JOIN', { participant: toParticipantDTO(rec), participantCount: count }, { teachers: true, boards: true });
       this.publishLeaderboardChanges(changes);
+    });
+  }
+
+  /** Read-only preflight; actual joining still checks admission inside its serialized mutation. */
+  async checkStudentAdmission(user?: { id: string } | null): Promise<void> {
+    return this.run(async () => {
+      const existing = user ? [...this.participants.values()].find((p) => p.userId === user.id) : undefined;
+      await checkStudentAdmission({ state: this.session.state, settings: this.session.settings, participantCount: this.activeParticipantCount(), accountStatus: existing?.status }, user, (classroomId, userId) => this.deps.classrooms.isMember(classroomId, userId));
     });
   }
 

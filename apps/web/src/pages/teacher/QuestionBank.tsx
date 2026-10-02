@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import type { QuestionDTO } from '@brainbattle/shared';
 import { api } from '../../core/api';
 import { QuestionEditor, TYPE_LABEL } from './QuestionEditor';
+import { useDialogs } from '../../components/Dialog';
 import { TeacherLayout } from './TeacherLayout';
 
 export default function QuestionBank() {
+  const dialogs = useDialogs();
   const [items, setItems] = useState<QuestionDTO[]>([]);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<QuestionDTO | null | undefined>(undefined);
@@ -47,7 +49,7 @@ export default function QuestionBank() {
                 <button
                   className="btn small danger"
                   onClick={async () => {
-                    if (!confirm('삭제하시겠습니까? (진행 중/종료된 세션에는 영향 없음)')) return;
+                    if (!await dialogs.confirm({ title: '문제를 삭제할까요?', description: '진행 중이거나 종료된 세션에는 영향을 주지 않습니다. 이 작업은 되돌릴 수 없습니다.', confirmText: '삭제', destructive: true })) return;
                     await api('DELETE', `/api/questions/${q.id}`);
                     load();
                   }}

@@ -12,6 +12,7 @@ import {
 import { api, ApiError } from '../../core/api';
 import { MathEditor } from '../../components/MathEditor';
 import { ContentBlocks } from '../../components/Content';
+import { useDialogs } from '../../components/Dialog';
 import { Modal } from '../../components/common';
 
 export const TYPE_LABEL: Record<QuestionType, string> = {
@@ -36,6 +37,7 @@ function readAsDataUrl(file: File): Promise<string> {
 
 /** Content block editor with drag & drop for images. */
 export function BlockEditor({ value, onChange, label }: { value: ContentBlock[]; onChange: (b: ContentBlock[]) => void; label: string }) {
+  const dialogs = useDialogs();
   const [drag, setDrag] = useState(false);
   const set = (i: number, b: ContentBlock) => onChange(value.map((x, j) => (j === i ? b : x)));
   const onFiles = async (files: FileList | null) => {
@@ -43,7 +45,7 @@ export function BlockEditor({ value, onChange, label }: { value: ContentBlock[];
     const added: ContentBlock[] = [];
     for (const f of Array.from(files)) {
       if (f.size > MAX_INLINE_FILE) {
-        alert(`${f.name}: 600KB 이하 파일만 첨부할 수 있습니다 (MVP: 인라인 저장).`);
+        await dialogs.notice({ title: '파일을 첨부할 수 없습니다.', description: `${f.name}: 600KB 이하 파일만 첨부할 수 있습니다.` });
         continue;
       }
       const url = await readAsDataUrl(f);

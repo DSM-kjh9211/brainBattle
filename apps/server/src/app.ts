@@ -22,6 +22,7 @@ import { createDb, migrate, type Db } from './db/db.js';
 import { TokenService, type UserClaims } from './lib/auth.js';
 import { systemClock, type Clock } from './lib/clock.js';
 import { JoinGuard } from './lib/rateLimit.js';
+import { normalizeJoinCode } from './lib/util.js';
 import { QuestionRepository } from './repositories/questions.js';
 import { QuestionSetRepository } from './repositories/questionSets.js';
 import { AuditLog, ClassroomRepository, UserRepository } from './repositories/users.js';
@@ -29,6 +30,7 @@ import { RealtimeHub } from './realtime/hub.js';
 import { SessionManager } from './realtime/sessionManager.js';
 import { DEFAULT_RUNTIME_CONFIG } from './realtime/sessionRuntime.js';
 import { SessionStore } from './realtime/sessionStore.js';
+import { checkStudentAdmission } from './realtime/admission.js';
 import { SessionService } from './services/sessionService.js';
 
 declare module 'fastify' {
@@ -139,6 +141,45 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
   app.get('/api/health', async () => {
     await db.query('SELECT 1');
     return { ok: true, nodeId: config.nodeId, sessionsLoaded: manager.loaded.length, connections: hub.connectionCount, time: clock.now() };
+  });
+
+  /* ------------------------------------------------------------------ student admission */
+  // Also bound direct peers: forged forwarded IPs must not provide unlimited code checks.
+  // The larger peer quota accommodates classrooms sharing a reverse proxy.
+  const joinPeerLimit = app.createRateLimit({
+    max: 120,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => `join-peer:${req.raw.socket.remoteAddress ?? 'unknown'}`,
+  });
+  app.post('/api/join/check', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const peerLimit = await joinPeerLimit(req);
+    if (!peerLimit.isAllowed && peerLimit.isExceeded) throw new AppError('RATE_LIMITED', 'too many requests');
+    if (joinGuard.isBlocked(req.ip)) throw new AppError('JOIN_BLOCKED', 'too many failed attempts, try again later');
+    const { code } = z.object({ code: z.string().trim().min(1).max(64) }).parse(req.body);
+    let user: { id: string } | null = null;
+    if (req.headers.authorization) {
+      await authenticate(req);
+      user = { id: req.user!.sub };
+    }
+    const normalized = normalizeJoinCode(code);
+    const sessionId = await manager.findByJoinCode(normalized);
+    if (!sessionId) {
+      joinGuard.recordFailure(req.ip);
+      if (await store.hasFinishedJoinCode(normalized)) {
+        return reply.status(409).send({ error: { code: 'SESSION_FINISHED', message: 'session has finished' } });
+      }
+      throw new AppError('INVALID_JOIN_CODE', 'no session with this code');
+    }
+    try {
+      const runtime = manager.peek(sessionId);
+      if (runtime && !runtime.disposed) await runtime.checkStudentAdmission(user);
+      else await checkStudentAdmission(await store.loadAdmissionSnapshot(sessionId, user?.id ?? null), user, (classroomId, userId) => classrooms.isMember(classroomId, userId));
+    } catch (e) {
+      if (e instanceof AppError) throw new AppError(e.code, e.message);
+      throw e;
+    }
+    // A preflight is not a successful join and must not reset brute-force failures.
+    return { available: true };
   });
 
   /* ------------------------------------------------------------------ auth */

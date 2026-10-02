@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Dialog } from './Dialog';
 import type { SocketStatus } from '../core/battleSocket';
 
 export function Countdown({ deadlineAt, now, paused, big }: { deadlineAt: number | null; now: number; paused?: boolean; big?: boolean }) {
@@ -71,26 +72,12 @@ export function useToast() {
 }
 
 export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-label={title}>
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button className="btn ghost" onClick={onClose} aria-label="닫기">✕</button>
-        </div>
-        <div className="modal-body">{children}</div>
-      </div>
-    </div>
-  );
+  return <Dialog title={title} onClose={onClose} wide={wide}>{children}</Dialog>;
 }
 
 export const ERROR_TEXT: Record<string, string> = {
-  INVALID_JOIN_CODE: '참가 코드를 찾을 수 없습니다.',
+  INVALID_JOIN_CODE: '존재하지 않는 참가 코드입니다.',
+  SESSION_FINISHED: '이미 종료된 세션입니다.',
   JOIN_BLOCKED: '시도가 너무 많습니다. 잠시 후 다시 시도하세요.',
   SESSION_FULL: '정원이 가득 찼습니다.',
   SESSION_CLOSED: '지금은 참가할 수 없는 세션입니다.',

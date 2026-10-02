@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import type { OwnSubmissionView, QuestionReveal, StudentQuestionView } from '@brainbattle/shared';
 import { useAuth } from '../../core/auth';
 import { studentReducer, type StudentView } from '../../core/reducers';
@@ -7,6 +7,8 @@ import { useBattle, useServerNow } from '../../core/useBattle';
 import { AnswerInput, emptyDraft, isDraftComplete, type Draft } from '../../components/AnswerInput';
 import { AnswerView, ContentBlocks, CorrectAnswerView } from '../../components/Content';
 import { ConnectionBadge, Countdown, errorText, StateBadge, Toast, useToast } from '../../components/common';
+
+import { HomePage, type JoinDetails } from '../Home';
 
 interface Identity {
   sessionId: string;
@@ -36,11 +38,18 @@ function writeJSON(k: string, v: unknown) {
 
 export function PlayPage() {
   const { code = '' } = useParams();
-  const { user, token } = useAuth();
+  return <PlaySession key={code} />;
+}
+
+function PlaySession() {
+  const { code = '' } = useParams();
+  const { token } = useAuth();
+  const location = useLocation();
+  const initialJoin = location.state as JoinDetails | null;
   const identityRef = useRef<Identity | null>(readJSON<Identity>(idKey(code)));
-  const [nickname, setNickname] = useState(identityRef.current?.nickname ?? '');
-  const [useAccount, setUseAccount] = useState(false);
-  const [started, setStarted] = useState(!!identityRef.current);
+  const [nickname, setNickname] = useState(identityRef.current?.nickname ?? initialJoin?.nickname ?? '');
+  const [useAccount, setUseAccount] = useState(initialJoin?.useAccount ?? false);
+  const [started, setStarted] = useState(!!identityRef.current || !!initialJoin?.nickname.trim());
   const { toast, show, clear } = useToast();
 
   const battle = useBattle<StudentView>({
@@ -84,50 +93,19 @@ export function PlayPage() {
       writeJSON(idKey(code), null);
       identityRef.current = null;
       setStarted(false);
+    } else if (battle.fatal && !battle.state) {
+      setStarted(false);
     }
-  }, [battle.fatal, code]);
+  }, [battle.fatal, battle.state, code]);
 
   const s = battle.state;
 
   if (!started || (!s && battle.fatal && battle.fatal !== 'INVALID_RESUME_TOKEN')) {
-    return (
-      <div className="home">
-        <form
-          className="home-card"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (nickname.trim()) setStarted(true);
-          }}
-        >
-          <div className="brand small">
-            <span className="brand-mark">B</span> BrainBattle
-          </div>
-          <p>
-            참가 코드 <b className="code-chip">{code}</b>
-          </p>
-          {battle.fatal && <p className="error">{errorText(battle.fatal)}</p>}
-          <input
-            className="input"
-            placeholder="닉네임 (이름)"
-            maxLength={20}
-            value={nickname}
-            autoFocus
-            onChange={(e) => setNickname(e.target.value)}
-          />
-          {user && (
-            <label className="checkbox">
-              <input type="checkbox" checked={useAccount} onChange={(e) => setUseAccount(e.target.checked)} /> {user.displayName} 계정으로 참가
-            </label>
-          )}
-          <button className="btn primary big" disabled={!nickname.trim()}>
-            입장
-          </button>
-          <Link to="/" className="muted small">
-            ← 다른 코드 입력
-          </Link>
-        </form>
-      </div>
-    );
+    return <HomePage initialCode={code} joinError={battle.fatal} onJoin={(details) => {
+      setNickname(details.nickname);
+      setUseAccount(details.useAccount);
+      setStarted(true);
+    }} />;
   }
 
   if (!s) {

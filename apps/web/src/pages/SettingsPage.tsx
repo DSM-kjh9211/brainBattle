@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DEFAULT_SHORTCUTS, isBrowserReserved, MATH_COMMANDS, type ShortcutMap } from '@brainbattle/shared';
 import { desktop, detectOS, effectiveShortcuts, loadShortcutOverrides, saveShortcutOverrides } from '../core/platform';
+import { useDialogs } from '../components/Dialog';
 import { MathEditor } from '../components/MathEditor';
 
 function describe(e: React.KeyboardEvent): string | null {
@@ -15,6 +16,7 @@ function describe(e: React.KeyboardEvent): string | null {
 
 /** Per-device math shortcut configuration (conflicts differ by OS / browser / desktop app). */
 export default function SettingsPage() {
+  const dialogs = useDialogs();
   const [overrides, setOverrides] = useState<ShortcutMap>(loadShortcutOverrides());
   const [recording, setRecording] = useState<string | null>(null);
   const [demo, setDemo] = useState('');
@@ -56,7 +58,7 @@ export default function SettingsPage() {
                     const b = describe(e);
                     if (!b) return;
                     if (!desktop && isBrowserReserved(b, os)) {
-                      alert(`${b} 는 브라우저가 사용하는 단축키입니다.`);
+                      void dialogs.notice({ title: '단축키를 사용할 수 없습니다.', description: `${b}는 브라우저가 사용하는 단축키입니다.` });
                       return;
                     }
                     update({ ...overrides, [c.id]: b });

@@ -30,6 +30,7 @@ export function useBattle<S>(opts: UseBattleOptions<S>) {
 
   useEffect(() => {
     if (!opts.enabled) return;
+    setFatal(null);
     const socket = new BattleSocket({
       url: wsUrl(opts.routeKey),
       join: (epoch) => optsRef.current.join(epoch),

@@ -1,5 +1,6 @@
 import { AppError } from '@brainbattle/shared';
 import type { Db, Queryable } from '../db/db.js';
+import type { AdmissionSnapshot } from './admission.js';
 import type {
   ParticipantRecord,
   ScoreRecord,
@@ -141,6 +142,24 @@ export class SessionStore {
       [code],
     );
     return rows[0] ?? null;
+  }
+
+  async hasFinishedJoinCode(code: string): Promise<boolean> {
+    const { rows } = await this.db.query('SELECT id FROM sessions WHERE join_code = $1 AND state = \'FINISHED\' LIMIT 1', [code]);
+    return rows.length > 0;
+  }
+
+  /** Avoid acquiring another node's lease or loading questions/submissions for a preflight. */
+  async loadAdmissionSnapshot(sessionId: string, userId: string | null): Promise<AdmissionSnapshot> {
+    const { rows } = await this.db.query<Row>(
+      `SELECT s.state, s.settings,
+        (SELECT count(*) FROM session_participants p WHERE p.session_id = s.id AND p.status NOT IN ('KICKED', 'LEFT')) AS participant_count,
+        (SELECT p.status FROM session_participants p WHERE p.session_id = s.id AND p.user_id = $2 LIMIT 1) AS account_status
+       FROM sessions s WHERE s.id = $1`, [sessionId, userId],
+    );
+    const row = rows[0];
+    if (!row) throw new AppError('INVALID_JOIN_CODE', 'no session with this code');
+    return { state: row.state, settings: row.settings, participantCount: Number(row.participant_count), accountStatus: row.account_status };
   }
 
   /** Optimistic concurrency: fails with VERSION_CONFLICT if another writer changed the row. */

@@ -18,6 +18,7 @@ import { TEACHER_RESYNC_EVENTS, teacherReducer } from '../../core/reducers';
 import { useBattle, useServerNow } from '../../core/useBattle';
 import { AnswerView, LeaderboardList } from '../../components/Content';
 import { ConnectionBadge, Countdown, errorText, StateBadge, Toast, useToast } from '../../components/common';
+import { useDialogs } from '../../components/Dialog';
 import { TYPE_LABEL } from './QuestionEditor';
 import { TeacherLayout } from './TeacherLayout';
 
@@ -43,6 +44,7 @@ const VIS_LABEL: Record<string, string> = {
 type Tab = 'control' | 'matrix' | 'grading' | 'ranking' | 'participants';
 
 export default function LiveSession() {
+  const dialogs = useDialogs();
   const { id = '' } = useParams();
   const { token } = useAuth();
   const { toast, show, clear } = useToast();
@@ -142,7 +144,7 @@ export default function LiveSession() {
           </>
         )}
         {s.state !== 'FINISHED' && can('FINISHED') && (
-          <button className="btn danger" onClick={() => confirm('세션을 종료하고 답안을 잠그시겠습니까?') && void cmd('TEACHER_END_SESSION', {}, '세션 종료')}>■ 종료</button>
+          <button className="btn danger" onClick={async () => { if (await dialogs.confirm({ title: '세션을 종료할까요?', description: '세션을 종료하면 답안이 잠깁니다.', confirmText: '종료', destructive: true })) await cmd('TEACHER_END_SESSION', {}, '세션 종료'); }}>■ 종료</button>
         )}
         {s.state === 'FINISHED' && !s.resultsReleased && <button className="btn primary" onClick={() => void cmd('TEACHER_RELEASE_RESULTS', {}, '결과 공개')}>결과 공개</button>}
         {s.state === 'FINISHED' && <Link className="btn" to={`/teacher/sessions/${id}/results`}>결과 분석 →</Link>}
@@ -404,6 +406,7 @@ function GradeCard({ sub, q, name, cmd, focused, scoringMode }: { sub: TeacherSu
 }
 
 function ParticipantsTab({ s, cmd }: { s: TeacherSessionState; cmd: Cmd }) {
+  const dialogs = useDialogs();
   const STATUS: Record<string, string> = { CONNECTED: '연결됨', DISCONNECTED: '연결 끊김', RECONNECTING: '재연결 중', LEFT: '나감', KICKED: '강퇴됨' };
   return (
     <div className="panel">
@@ -426,7 +429,7 @@ function ParticipantsTab({ s, cmd }: { s: TeacherSessionState; cmd: Cmd }) {
               <td>{new Date(p.joinedAt).toLocaleTimeString()}</td>
               <td>
                 {p.status !== 'KICKED' && (
-                  <button className="btn small danger" onClick={() => confirm(`${p.nickname} 학생을 강퇴할까요?`) && void cmd('TEACHER_KICK_PARTICIPANT', { participantId: p.participantId }, '강퇴 완료')}>
+                  <button className="btn small danger" onClick={async () => { if (await dialogs.confirm({ title: `${p.nickname} 학생을 강퇴할까요?`, confirmText: '강퇴', destructive: true })) await cmd('TEACHER_KICK_PARTICIPANT', { participantId: p.participantId }, '강퇴 완료'); }}>
                     강퇴
                   </button>
                 )}
