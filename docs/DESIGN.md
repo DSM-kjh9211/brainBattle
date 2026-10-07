@@ -368,14 +368,16 @@ replay:  est ≤ disconnectAt + 1s  ∧ diff ≤ offlineReplayWindow(120s) ∧ s
 | POST | `/api/auth/register`, `/api/auth/login` | 가입(교사 가입은 설정), 로그인 — 분당 20회 제한 |
 | GET | `/api/auth/me` | |
 | GET/POST | `/api/questions` | 목록(검색·유형 필터) / 생성 |
+| POST | `/api/questions/batch` | 여러 문항 일괄 생성 `{questions}` (전부 성공 또는 전부 취소) |
 | GET/PUT/DELETE | `/api/questions/:id` | 조회 / 수정 / soft delete(세트에서 제거, 세션 스냅샷 보존) |
 | POST | `/api/questions/:id/duplicate` | 복제 |
-| GET/POST | `/api/question-sets` | |
+| GET/POST | `/api/question-sets` | 생성 시 `questions`를 함께 보내면 세트와 문항을 한 트랜잭션으로 생성 |
 | GET/PUT/DELETE | `/api/question-sets/:id` | |
 | POST | `/api/question-sets/:id/duplicate` | 세트 복제 |
 | GET | `/api/question-sets/:id/preview` | 미리보기(정답 포함) |
 | POST | `/api/question-sets/:id/items` | 은행 문항 추가 `{questionId, position?, displayNumber?, scoreOverride?}` |
 | POST | `/api/question-sets/:id/questions` | 문항 생성 + 추가 |
+| POST | `/api/question-sets/:id/questions/batch` | 여러 문항 생성 + 추가 `{questions}` (전부 성공 또는 전부 취소) |
 | PATCH/DELETE | `/api/question-sets/:id/items/:itemId` | 표시 번호/배점 override, 제거 |
 | POST | `/api/question-sets/:id/items/:itemId/duplicate` | 문항 복제 후 바로 뒤에 삽입 |
 | PUT | `/api/question-sets/:id/order` | Drag & Drop 순서 `{itemIds}` (현재 목록의 순열만 허용) |
@@ -389,6 +391,13 @@ replay:  est ≤ disconnectAt + 1s  ∧ diff ≤ offlineReplayWindow(120s) ∧ s
 | GET | `/api/sessions/:id/submissions/:sid/revisions` | 수정 이력 |
 | GET | `/api/sessions/:id/events` | 세션 이벤트(감사) 로그 |
 | GET/POST | `/api/classrooms`, `/api/classrooms/:id/members` | 학급 관리 |
+| GET | `/api/ai/status` | AI 기능 사용 가능 여부(`ANTHROPIC_API_KEY` 설정 시 활성) |
+| POST | `/api/ai/questions/generate` | AI 문제 초안 생성 `{topic, audience?, difficulty, count, types, instructions?, sourceText?}` → `{questions, dropped}` |
+| POST | `/api/ai/questions/review` | AI 문제 검토 `{question}` → `{verdict, summary, issues, revised}` |
+| POST | `/api/ai/question-sets/generate` | AI 문제 세트 초안 → `{title, description, questions, dropped}` |
+| POST | `/api/ai/question-sets/:id/review` | AI 세트 검토(문항별 + 중복·범위·난이도 균형) |
+
+AI 응답은 **초안**이다. 서버는 AI 결과를 저장하지 않으며, 교사가 확인·선택한 문항만 기존 문제 API로 저장된다. 모델 출력은 `questionInputSchema`로 다시 검증하고 통과하지 못한 초안은 버린다(`dropped`). 이미지·오디오·영상은 모델에 전송하지 않는다. 키 미설정 시 `AI_UNAVAILABLE`(503), 모델 호출 실패 시 `AI_FAILED`(502). AI 라우트는 분당 `AI_RATE_LIMIT_PER_MIN`회로 제한한다 → `apps/server/src/services/aiService.ts`
 
 → `apps/server/src/app.ts`
 

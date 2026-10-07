@@ -21,6 +21,10 @@ export interface ServerConfig {
   logLevel: string;
   authRateLimitPerMin: number;
   apiRateLimitPerMin: number;
+  /** AI authoring assistant; disabled (503) when no key is configured */
+  anthropicApiKey: string | null;
+  aiModel: string;
+  aiRateLimitPerMin: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -51,5 +55,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     logLevel: env.LOG_LEVEL ?? (mode === 'test' ? 'silent' : 'info'),
     authRateLimitPerMin: Number(env.AUTH_RATE_LIMIT_PER_MIN ?? 20),
     apiRateLimitPerMin: Number(env.API_RATE_LIMIT_PER_MIN ?? 600),
+    anthropicApiKey: env.ANTHROPIC_API_KEY?.trim() || null,
+    aiModel: env.AI_MODEL?.trim() || 'claude-opus-5-5',
+    aiRateLimitPerMin: Number(env.AI_RATE_LIMIT_PER_MIN ?? 10),
   };
 }

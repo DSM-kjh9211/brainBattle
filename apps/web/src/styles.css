@@ -235,6 +235,13 @@ math-field.math-field:focus-within { border-color: var(--brand); box-shadow: 0 0
 .field-label { font-size: .85rem; color: var(--muted); font-weight: 600; }
 .fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .fieldset legend { font-weight: 700; padding: 0 6px; }
+.ai-issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ai-issue { display: flex; gap: 8px; align-items: flex-start; }
+.ai-sev { flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--line); }
+.ai-issue.sev-error .ai-sev { background: var(--bad); color: #fff; }
+.ai-issue.sev-warning .ai-sev { background: var(--warn-bg); color: var(--warn); }
+.ai-ok { color: var(--ok); font-weight: 600; }
+.ai-draft.unpicked { opacity: .55; }
 .block-editor { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .block-editor.drag { border-color: var(--brand); background: #eef2ff; }
 .block-row { display: flex; gap: 8px; align-items: flex-start; }

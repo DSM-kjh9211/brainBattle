@@ -28,6 +28,9 @@ export const ERROR_CODES = {
   STALE_REVISION: 'STALE_REVISION',
   SESSION_OWNED_ELSEWHERE: 'SESSION_OWNED_ELSEWHERE',
   VERSION_CONFLICT: 'VERSION_CONFLICT',
+
+  AI_UNAVAILABLE: 'AI_UNAVAILABLE',
+  AI_FAILED: 'AI_FAILED',
 } as const;
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
@@ -61,6 +64,10 @@ export class AppError extends Error {
         return 429;
       case 'INTERNAL':
         return 500;
+      case 'AI_FAILED':
+        return 502;
+      case 'AI_UNAVAILABLE':
+        return 503;
       default:
         return 409;
     }

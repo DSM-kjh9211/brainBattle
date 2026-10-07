@@ -96,6 +96,8 @@ export const ERROR_TEXT: Record<string, string> = {
   FORBIDDEN: '권한이 없습니다.',
   UNAUTHENTICATED: '로그인이 필요합니다.',
   INVALID_TRANSITION: '현재 상태에서 할 수 없는 작업입니다.',
+  AI_UNAVAILABLE: 'AI 기능을 사용할 수 없습니다. 서버의 AI 설정(API 키)을 확인하세요.',
+  AI_FAILED: 'AI가 요청을 처리하지 못했습니다. 조건을 바꾸거나 잠시 후 다시 시도해 주세요.',
 };
 
 export const errorText = (code: string, fallback?: string) => ERROR_TEXT[code] ?? fallback ?? code;

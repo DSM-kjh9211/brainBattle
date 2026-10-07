@@ -5,6 +5,7 @@ import { api } from '../../core/api';
 import { StateBadge } from '../../components/common';
 import { useDialogs } from '../../components/Dialog';
 import { PanelSkeleton } from '../../components/Skeleton';
+import { AiButton, AiGenerateModal } from './AiAssist';
 import { TeacherLayout } from './TeacherLayout';
 
 const MODE_LABEL: Record<string, string> = { DIGITAL: '디지털 문제', PAPER: '종이 문제지', SYNCHRONIZED: '동시 진행', FREE: '자유 진행' };
@@ -18,6 +19,7 @@ export default function TeacherHome() {
   const [setsError, setSetsError] = useState(false);
   const [sessionsError, setSessionsError] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const nav = useNavigate();
   const ongoingSessions = sessions.filter((s) => s.state !== 'FINISHED');
   const finishedSessions = sessions.filter((s) => s.state === 'FINISHED');
@@ -61,7 +63,23 @@ export default function TeacherHome() {
   };
 
   return (
-    <TeacherLayout title="대시보드" actions={<button className="btn primary" disabled={creating} onClick={createSet}>+ 문제 세트</button>}>
+    <TeacherLayout title="대시보드" actions={
+        <>
+          <AiButton onClick={() => setAiOpen(true)}>AI로 세트 만들기</AiButton>
+          <button className="btn primary" disabled={creating} onClick={createSet}>+ 문제 세트</button>
+        </>
+      }
+    >
+      {aiOpen && (
+        <AiGenerateModal
+          mode="set"
+          onClose={() => setAiOpen(false)}
+          onSave={async (qs, meta) => {
+            const s = await api<QuestionSetDTO>('POST', '/api/question-sets', { ...meta, questions: qs });
+            nav(`/teacher/sets/${s.id}`);
+          }}
+        />
+      )}
       <div className="grid-2">
         <section className="panel">
           <h2>문제 세트</h2>

@@ -7,6 +7,7 @@ import type { QuestionDTO, QuestionSetDTO, QuestionSetItemDTO } from '@brainbatt
 import { api } from '../../core/api';
 import { ContentBlocks, CorrectAnswerView } from '../../components/Content';
 import { Modal } from '../../components/common';
+import { AiButton, AiGenerateModal, AiSetReviewModal } from './AiAssist';
 import { QuestionEditor, TYPE_LABEL } from './QuestionEditor';
 import { TeacherLayout } from './TeacherLayout';
 
@@ -72,6 +73,7 @@ export default function SetEditor() {
   const [editing, setEditing] = useState<QuestionDTO | null | undefined>(undefined);
   const [picker, setPicker] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [ai, setAi] = useState<'generate' | 'review' | null>(null);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   const refreshQuestions = async (s: QuestionSetDTO) => {
@@ -117,6 +119,8 @@ export default function SetEditor() {
       title={set.title}
       actions={
         <>
+          <AiButton onClick={() => setAi('generate')}>AI 출제</AiButton>
+          <AiButton disabled={set.items.length === 0} onClick={() => setAi('review')}>AI 검토</AiButton>
           <button className="btn" onClick={() => setPreview(true)}>미리보기</button>
           <button className="btn" onClick={() => setPicker(true)}>은행에서 추가</button>
           <button className="btn" onClick={() => setEditing(null)}>+ 새 문제</button>
@@ -170,7 +174,7 @@ export default function SetEditor() {
           </ul>
         </SortableContext>
       </DndContext>
-      {set.items.length === 0 && <p className="muted">문제가 없습니다. "새 문제" 또는 "은행에서 추가"를 사용하세요.</p>}
+      {set.items.length === 0 && <p className="muted">문제가 없습니다. "새 문제", "은행에서 추가" 또는 "AI 출제"를 사용하세요.</p>}
 
       {editing !== undefined && (
         <QuestionEditor
@@ -185,6 +189,17 @@ export default function SetEditor() {
       )}
       {picker && <BankPicker exclude={new Set(set.items.map((i) => i.questionId))} onClose={() => setPicker(false)} onPick={async (qid) => apply(await api('POST', `/api/question-sets/${set.id}/items`, { questionId: qid }))} />}
       {preview && <SetPreview set={set} questions={questions} onClose={() => setPreview(false)} />}
+      {ai === 'generate' && (
+        <AiGenerateModal
+          mode="questions"
+          onClose={() => setAi(null)}
+          onSave={async (qs) => {
+            apply(await api<QuestionSetDTO>('POST', `/api/question-sets/${set.id}/questions/batch`, { questions: qs }));
+            setAi(null);
+          }}
+        />
+      )}
+      {ai === 'review' && <AiSetReviewModal setId={set.id} onClose={() => setAi(null)} />}
     </TeacherLayout>
   );
 }
