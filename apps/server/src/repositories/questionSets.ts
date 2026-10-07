@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AppError, questionSetInputSchema, type QuestionSetDTO, type QuestionSetItemDTO } from '@brainbattle/shared';
+import { AppError, questionSetInputSchema, type QuestionInput, type QuestionSetDTO, type QuestionSetItemDTO } from '@brainbattle/shared';
 import type { Db, Queryable } from '../db/db.js';
 import { newId } from '../lib/util.js';
 import { compactPositions, QuestionRepository } from './questions.js';
@@ -89,15 +89,29 @@ export class QuestionSetRepository {
     return s;
   }
 
-  async create(ownerId: string, input: z.input<typeof questionSetInputSchema>): Promise<QuestionSetDTO> {
+  /** Creates the set, optionally with new questions, atomically. */
+  async create(ownerId: string, input: z.input<typeof questionSetInputSchema>, questions: QuestionInput[] = []): Promise<QuestionSetDTO> {
     const v = questionSetInputSchema.parse(input);
     const id = newId('qs', 6);
-    await this.db.query(
-      `INSERT INTO question_sets (id, owner_id, title, description, delivery_mode, progress_mode, scoring_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, ownerId, v.title, v.description ?? null, v.deliveryMode, v.progressMode, v.scoringMode],
-    );
-    return (await this.get(id))!;
+    return this.db.tx(async (q) => {
+      await q.query(
+        `INSERT INTO question_sets (id, owner_id, title, description, delivery_mode, progress_mode, scoring_mode)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [id, ownerId, v.title, v.description ?? null, v.deliveryMode, v.progressMode, v.scoringMode],
+      );
+      for (const input of questions) await this.insertAt(q, id, (await this.questions.create(ownerId, input, q)).id, {});
+      return (await this.get(id, q))!;
+    });
+  }
+
+  /** Creates the questions and appends them to the set; all or nothing. */
+  async addNewQuestions(setId: string, ownerId: string, questions: QuestionInput[]): Promise<QuestionSetDTO> {
+    return this.db.tx(async (q) => {
+      await this.getOwned(setId, ownerId, q);
+      for (const input of questions) await this.insertAt(q, setId, (await this.questions.create(ownerId, input, q)).id, {});
+      await this.touch(q, setId);
+      return (await this.get(setId, q))!;
+    });
   }
 
   async update(id: string, ownerId: string, input: z.input<typeof questionSetInputSchema>): Promise<QuestionSetDTO> {

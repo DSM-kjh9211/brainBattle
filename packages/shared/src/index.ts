@@ -1,6 +1,7 @@
 export * from './enums.js';
 export * from './errors.js';
 export * from './question.js';
+export * from './ai.js';
 export * from './session.js';
 export * from './stateMachine.js';
 export * from './protocol.js';

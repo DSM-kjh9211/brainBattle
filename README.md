@@ -6,6 +6,8 @@
 - **Paper Battle** — 종이 문제지 + 디지털 답안 입력 + 실시간 채점 + 실시간 점수판
 - **Exam** — 시험 진행 + 답안 관리(수정 이력) + 채점(부분 점수) + 결과 분석
 
+교사는 **AI(Claude)로 문제 출제·문제 검토·문제 세트 생성**을 할 수 있습니다(`ANTHROPIC_API_KEY` 설정 시). AI 결과는 초안이며 교사가 확인한 문항만 저장됩니다.
+
 학생은 설치 없이 웹으로 참가하고, 교사는 웹 또는 데스크톱 앱(Electron, 프로젝터 듀얼 모니터 지원)을 사용합니다.
 Dedicated Server 방식이며 세션 상태·시간·채점·순위의 최종 권한은 서버에 있습니다.
 
@@ -112,6 +114,8 @@ NODE_ENV=production JWT_SECRET=<32자 이상> DATABASE_URL=postgres://user:pass@
 | `LEADERBOARD_SNAPSHOT_MS` | `5000` | 전체 순위 스냅샷 주기 |
 | `TIMESTAMP_TRUST_WINDOW_MS` | `1000` | 클라이언트 시각 신뢰 창 |
 | `AUTH_RATE_LIMIT_PER_MIN`, `API_RATE_LIMIT_PER_MIN` | `20`, `600` | REST rate limit |
+| `ANTHROPIC_API_KEY` | — | AI 출제·검토 기능용 Claude API 키. 비어 있으면 AI 기능 비활성화 |
+| `AI_MODEL`, `AI_RATE_LIMIT_PER_MIN` | `claude-opus-5-5`, `10` | AI 모델, AI 요청 rate limit |
 | `VITE_API_URL`, `VITE_WS_URL` | 같은 origin | 웹 빌드 시 API/WS가 다른 호스트일 때 |
 | `BRAINBATTLE_URL` | — | 데스크톱 앱이 접속할 서버 |
 

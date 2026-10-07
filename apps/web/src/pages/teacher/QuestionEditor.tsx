@@ -14,6 +14,7 @@ import { MathEditor } from '../../components/MathEditor';
 import { ContentBlocks } from '../../components/Content';
 import { useDialogs } from '../../components/Dialog';
 import { Modal } from '../../components/common';
+import { AiQuestionReviewPanel } from './AiAssist';
 
 export const TYPE_LABEL: Record<QuestionType, string> = {
   MULTIPLE_CHOICE: '객관식',
@@ -152,10 +153,7 @@ export function QuestionEditor({ question, onClose, onSaved }: { question?: Ques
     patch(base);
   };
 
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    const body: QuestionInput = {
+  const toBody = (): QuestionInput => ({
       ...f,
       displayNumber: f.displayNumber?.trim() || null,
       title: f.title?.trim() || null,
@@ -166,7 +164,12 @@ export function QuestionEditor({ question, onClose, onSaved }: { question?: Ques
           ? Number(f.correctAnswer)
           : f.correctAnswer === '' ? undefined : f.correctAnswer,
       acceptedAnswers: (f.acceptedAnswers ?? []).filter((x) => x !== '' && x !== null),
-    };
+  });
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const body = toBody();
     try {
       const saved = question
         ? await api<QuestionDTO>('PUT', `/api/questions/${question.id}`, body)
@@ -352,6 +355,22 @@ export function QuestionEditor({ question, onClose, onSaved }: { question?: Ques
       </fieldset>
 
       <BlockEditor label="해설 (결과 공개 시 표시)" value={f.explanation ?? []} onChange={(explanation) => patch({ explanation })} />
+
+      <AiQuestionReviewPanel
+        getQuestion={toBody}
+        onApply={(r) =>
+          patch({
+            ...r,
+            displayNumber: r.displayNumber ?? '',
+            title: r.title ?? '',
+            description: r.description ?? [],
+            explanation: r.explanation ?? [],
+            choices: r.choices ?? null,
+            acceptedAnswers: r.acceptedAnswers ?? [],
+            grading: r.grading ?? { method: DEFAULT_GRADING_METHOD[r.type] },
+          })
+        }
+      />
 
       {error && <p className="error">{error}</p>}
       <div className="modal-actions">

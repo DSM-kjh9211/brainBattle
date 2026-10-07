@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { QuestionDTO } from '@brainbattle/shared';
 import { api } from '../../core/api';
+import { AiButton, AiGenerateModal } from './AiAssist';
 import { QuestionEditor, TYPE_LABEL } from './QuestionEditor';
 import { useDialogs } from '../../components/Dialog';
 import { TeacherLayout } from './TeacherLayout';
@@ -10,11 +11,17 @@ export default function QuestionBank() {
   const [items, setItems] = useState<QuestionDTO[]>([]);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<QuestionDTO | null | undefined>(undefined);
+  const [aiOpen, setAiOpen] = useState(false);
   const load = () => void api<QuestionDTO[]>('GET', `/api/questions?search=${encodeURIComponent(search)}`).then(setItems);
   useEffect(load, [search]);
 
   return (
-    <TeacherLayout title="문제 은행" actions={<button className="btn primary" onClick={() => setEditing(null)}>+ 새 문제</button>}>
+    <TeacherLayout title="문제 은행" actions={
+        <>
+          <AiButton onClick={() => setAiOpen(true)}>AI 출제</AiButton>
+          <button className="btn primary" onClick={() => setEditing(null)}>+ 새 문제</button>
+        </>
+      }>
       <input className="input" placeholder="제목/번호 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
       <table className="table">
         <thead>
@@ -67,6 +74,17 @@ export default function QuestionBank() {
           onClose={() => setEditing(undefined)}
           onSaved={() => {
             setEditing(undefined);
+            load();
+          }}
+        />
+      )}
+      {aiOpen && (
+        <AiGenerateModal
+          mode="questions"
+          onClose={() => setAiOpen(false)}
+          onSave={async (qs) => {
+            await api('POST', '/api/questions/batch', { questions: qs });
+            setAiOpen(false);
             load();
           }}
         />

@@ -12,6 +12,7 @@ import type {
   TeacherSessionState,
 } from '@brainbattle/shared';
 import { buildServer, type BuiltServer } from '../src/app.js';
+import type { AiClient } from '../src/services/aiService.js';
 import { loadConfig } from '../src/config.js';
 import { createDb, type Db } from '../src/db/db.js';
 import { ManualClock } from '../src/lib/clock.js';
@@ -27,7 +28,7 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function startServer(opts: { clock?: ManualClock; db?: Db; nodeId?: string } = {}): Promise<TestServer> {
+export async function startServer(opts: { clock?: ManualClock; db?: Db; nodeId?: string; ai?: AiClient } = {}): Promise<TestServer> {
   const clock = opts.clock ?? new ManualClock(Date.UTC(2026, 8, 18, 9, 0, 0));
   const db = opts.db ?? (await createDb('pglite://memory'));
   const config = {
@@ -37,7 +38,7 @@ export async function startServer(opts: { clock?: ManualClock; db?: Db; nodeId?:
     authRateLimitPerMin: 10_000,
     apiRateLimitPerMin: 100_000,
   };
-  const server = await buildServer(config, { clock, db });
+  const server = await buildServer(config, { clock, db, ai: opts.ai });
   await server.app.listen({ port: 0, host: '127.0.0.1' });
   const port = (server.app.server.address() as AddressInfo).port;
   return {

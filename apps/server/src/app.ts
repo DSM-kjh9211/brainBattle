@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z, ZodError } from 'zod';
 import {
+  aiReviewQuestionRequestSchema,
   AppError,
   createSessionSchema,
   PRESET_SETTINGS,
@@ -31,6 +32,7 @@ import { SessionManager } from './realtime/sessionManager.js';
 import { DEFAULT_RUNTIME_CONFIG } from './realtime/sessionRuntime.js';
 import { SessionStore } from './realtime/sessionStore.js';
 import { checkStudentAdmission } from './realtime/admission.js';
+import { AiService, AnthropicAiClient, type AiClient } from './services/aiService.js';
 import { SessionService } from './services/sessionService.js';
 
 declare module 'fastify' {
@@ -48,7 +50,7 @@ export interface BuiltServer {
   close(): Promise<void>;
 }
 
-export async function buildServer(config: ServerConfig, opts: { clock?: Clock; db?: Db } = {}): Promise<BuiltServer> {
+export async function buildServer(config: ServerConfig, opts: { clock?: Clock; db?: Db; ai?: AiClient } = {}): Promise<BuiltServer> {
   const clock = opts.clock ?? systemClock;
   const db = opts.db ?? (await createDb(config.databaseUrl));
   await migrate(db);
@@ -71,6 +73,7 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
   const questions = new QuestionRepository(db);
   const sets = new QuestionSetRepository(db);
   const sessions = new SessionService(db);
+  const ai = new AiService(opts.ai ?? (config.anthropicApiKey ? new AnthropicAiClient(config.anthropicApiKey, config.aiModel) : null));
   const store = new SessionStore(db);
   const manager = new SessionManager({
     db,
@@ -136,6 +139,7 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
   const uid = (req: FastifyRequest) => req.user!.sub;
   const params = <T extends z.ZodRawShape>(req: FastifyRequest, shape: T) => z.object(shape).parse(req.params);
   const idParam = { id: z.string().min(1).max(64) };
+  const questionBatch = z.array(questionInputSchema).min(1).max(50);
 
   /* ------------------------------------------------------------------ health */
   app.get('/api/health', async () => {
@@ -226,6 +230,15 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
     return questions.list(uid(req), q);
   });
   app.post('/api/questions', teacher, async (req) => questions.create(uid(req), questionInputSchema.parse(req.body)));
+  /** create several questions, all or nothing */
+  app.post('/api/questions/batch', teacher, async (req) => {
+    const body = z.object({ questions: questionBatch }).parse(req.body);
+    return db.tx(async (q) => {
+      const created = [];
+      for (const input of body.questions) created.push(await questions.create(uid(req), input, q));
+      return created;
+    });
+  });
   app.get('/api/questions/:id', teacher, async (req) => questions.getOwned(params(req, idParam).id, uid(req)));
   app.put('/api/questions/:id', teacher, async (req) => questions.update(params(req, idParam).id, uid(req), questionInputSchema.parse(req.body)));
   app.delete('/api/questions/:id', teacher, async (req, reply) => {
@@ -238,7 +251,10 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
 
   /* ------------------------------------------------------------------ question sets */
   app.get('/api/question-sets', teacher, async (req) => sets.list(uid(req)));
-  app.post('/api/question-sets', teacher, async (req) => sets.create(uid(req), questionSetInputSchema.parse(req.body)));
+  app.post('/api/question-sets', teacher, async (req) => {
+    const body = questionSetInputSchema.extend({ questions: questionBatch.optional() }).parse(req.body);
+    return sets.create(uid(req), body, body.questions);
+  });
   app.get('/api/question-sets/:id', teacher, async (req) => sets.getOwned(params(req, idParam).id, uid(req)));
   app.put('/api/question-sets/:id', teacher, async (req) => sets.update(params(req, idParam).id, uid(req), questionSetInputSchema.parse(req.body)));
   app.delete('/api/question-sets/:id', teacher, async (req, reply) => {
@@ -272,6 +288,10 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
     const q = await questions.create(uid(req), questionInputSchema.parse(req.body));
     return sets.addQuestion(id, uid(req), q.id);
   });
+  app.post('/api/question-sets/:id/questions/batch', teacher, async (req) => {
+    const body = z.object({ questions: questionBatch }).parse(req.body);
+    return sets.addNewQuestions(params(req, idParam).id, uid(req), body.questions);
+  });
   app.patch('/api/question-sets/:id/items/:itemId', teacher, async (req) => {
     const p = params(req, { ...idParam, itemId: z.string().min(1) });
     const body = z
@@ -290,6 +310,27 @@ export async function buildServer(config: ServerConfig, opts: { clock?: Clock; d
   app.put('/api/question-sets/:id/order', teacher, async (req) => {
     const body = z.object({ itemIds: z.array(z.string().min(1)).max(1000) }).parse(req.body);
     return sets.reorder(params(req, idParam).id, uid(req), body.itemIds);
+  });
+
+  /* ------------------------------------------------------------------ AI authoring assistant */
+  // Drafts and reviews are returned to the teacher, never saved here: saving goes through the question API.
+  const aiRoute = { ...teacher, config: { rateLimit: { max: config.aiRateLimitPerMin, timeWindow: '1 minute' } } };
+  app.get('/api/ai/status', teacher, async () => ({ enabled: ai.enabled }));
+  app.post('/api/ai/questions/generate', aiRoute, async (req) => {
+    const result = await ai.generateQuestions(req.body);
+    await audit.record({ actorId: uid(req), action: 'AI_GENERATE_QUESTIONS', ip: req.ip, details: { count: result.questions.length } });
+    return result;
+  });
+  app.post('/api/ai/questions/review', aiRoute, async (req) => ai.reviewQuestion(aiReviewQuestionRequestSchema.parse(req.body).question));
+  app.post('/api/ai/question-sets/generate', aiRoute, async (req) => {
+    const result = await ai.generateSet(req.body);
+    await audit.record({ actorId: uid(req), action: 'AI_GENERATE_SET', ip: req.ip, details: { count: result.questions.length } });
+    return result;
+  });
+  app.post('/api/ai/question-sets/:id/review', aiRoute, async (req) => {
+    const set = await sets.getOwned(params(req, idParam).id, uid(req));
+    const qs = await Promise.all(set.items.map((i) => questions.get(i.questionId)));
+    return ai.reviewSet(set, new Map(qs.flatMap((q) => (q ? [[q.id, q] as const] : []))));
   });
 
   /* ------------------------------------------------------------------ sessions */
